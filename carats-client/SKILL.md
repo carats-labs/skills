@@ -1,44 +1,50 @@
 ---
 name: carats-client
-description: Use this skill when coding client side logic, pages or components for carats framework
+description: Use when coding client-side pages, components, facets, or navigation in a Carats project.
 ---
 
-Prerequisites:
-- carats-essentials skill
+Read `carats-essentials` first.
+
 Dependencies:
-- "@carats/hooks": to use hooks
-- "@carats/render": to define facets
-- "@carats/core": to handle core functionality
-- "@carats/csr": to handle client side rendering
-- "jjsx": to handle jsx (peer dependency)
-- "vite": to handle build & resolution (peer dependency)
+- `@carats/hooks` for state and lifecycle callbacks
+- `@carats/render` for facets and `Burnish`
+- `@carats/core` for core functionality
+- `@carats/csr` for client-side rendering and navigation
+- `jjsx` for JSX (peer dependency)
+- `vite` for build and resolution (peer dependency)
 
+## Project files
+- There must be a proper folder at the exact location `src/client`.
+- There must be a `facets.tsx` file in the `src/client` folder.
+- There must be an `entrypoint.ts` file in the `src/client` folder.
+- There must be an `index.html` file in the `src/client` folder, compatible with the Vite HTML template.
+- The HTML template must contain `<!--app-head-->` inside the `<head>` tag and `<div id="app"><!--app-html--></div>` inside the `<body>` tag (including the HTML comments).
+- If any component sets `this.head`, the template must wrap `<!--app-head-->` with `<meta id="carats-crown-start" />` before it and `<meta id="carats-crown-end" />` after it. `clientRender` replaces the content between those markers on navigation.
+- The HTML template must contain `<script type="module" src="/entrypoint.ts"></script>` before the closing `</body>` tag.
+- The HTML template can contain static head tags, but try to avoid conflicts with a component's `head` property. A page component can provide dynamic head tags by assigning to `this.head` (this never works with arrow functions).
+- There must be a `vite-env.d.ts` file with the exact content `/// <reference types="vite/client" />`. It lives at `src/vite-env.d.ts`, one level above `src/client`, not inside `src/client`.
 
-Client coding is very crucial for carats.
-- There must be a proper folder at exact location src/client
-- There must be a facets.tsx file in src/client folder
-- There must be a entrypoint.ts file in src/client folder
-- There must be a index.html file in src/client folder which is compatible with vite html template
-- HTML template must contain <!--app-head--> inside head tag and <div id="app"><!--app-html--></div> inside body tag (including html comments)
-- HTML template must contain <script type="module" src="/entrypoint.ts"></script> before closing body tag
-- HTML template can contain static head tags but try to avoid conflict with components head property. A page component can provide dynamic head tags via this.head assignment (never works with arrow functions)
-- Sample component that provides dynamic tags:
+Sample component that provides dynamic head tags:
+
 ```tsx
 import { CaratsComponent } from '@carats/render';
+
 export default function Home(this: CaratsComponent) {
     this.head = <>
         <title>Home</title>
-        <meta name="description" content="Home page for carats" />
+        <meta name="description" content="Home page for Carats" />
     </>;
     return <div>Home</div>;
 }
 ```
-- The `CaratsComponent` type must be imported from `@carats/render`, it is not global.
-- There must be a vite-env.d.ts file with exact content: "/// <reference types="vite/client" />". It lives at **src/vite-env.d.ts**, one level above src/client, not inside src/client.
-- `this.head` requires a component declared with the `function` keyword, because an arrow function has no own `this`. For a component that is a plain function expression or an arrow and needs the annotation, type it as `CaratsComponentWithThis` instead.
 
-Facets are defined in facets.tsx file by defineFacets function from @carats/render and must be default exported.
-Sample facet definition:
+- The `CaratsComponent` type must be imported from `@carats/render`; it is not global.
+- `this.head` requires a component declared with the `function` keyword, because an arrow function has no own `this`. An arrow function cannot set `this.head`; use a `function` component when that assignment is needed.
+- `CaratsComponentWithThis<T>` describes a function component that uses `this` and receives props. `Burnish` infers it, so you rarely name it yourself.
+
+## Facets
+Facets are defined in `facets.tsx` with `defineFacets` from `@carats/render` and must be default exported.
+
 ```typescript
 import { defineFacets } from '@carats/render';
 import ErrorPage from './pages/_error';
@@ -52,7 +58,6 @@ export default defineFacets({
         '/profile/:id': Profile
     },
     suspense: {
-        loading: () => 'Loading...',
         error: ErrorPage,
         notFound: NotFound
     },
@@ -60,26 +65,35 @@ export default defineFacets({
 });
 ```
 
-routes is a map of routes to carats page components. Each route can have parameters like :id.
-suspense is a map of suspense states to carats components. `defineFacets` accepts a **partial** facets object, so `routes` and `suspense` are both optional and every suspense state can be omitted. Declare only what the app actually needs; `loading` is usually unnecessary.
-A culet is matched to a page purely by its route string, so the route of the culet and the route in `routes` must be character for character identical, including parameter names.
-inAppRouting is a boolean value that indicates whether the app should use in-app routing or not. in app routing provides a navigation similar to SPA. It requires clientRender() in the entrypoint.
-after defining facets, you must mount them in src/client/entrypoint.ts file. Sample entrypoint file:
+- `routes` is a map of route strings to Carats page components. A route can have parameters such as `:id`.
+- `suspense` is a map of suspense states to Carats components. `defineFacets` accepts a **partial** facets object, so `routes` and `suspense` are both optional and every suspense state can be omitted. Declare only what the app actually needs; `loading` is usually unnecessary and is omitted above.
+- A culet is matched to a page purely by its route string, so the culet route and the route in `routes` must be character-for-character identical, including parameter names. The page above uses `/profile/:id`, so its culet must also use `/profile/:id`. See `carats-server`.
+- `inAppRouting` indicates whether the app should use in-app routing. In-app routing provides SPA-like navigation and requires `clientRender()` in the entrypoint.
+
+After defining facets, mount them in `src/client/entrypoint.ts`:
+
 ```typescript
 import { mount, clientRender } from '@carats/csr';
-import facets from './facets.cara';
+import './base.sass';
+import facets from './facets';
 
 mount(facets);
-clientRender(); // required when in-app routing is enabled
+clientRender(); // renders the first page; also enables in-app routing when configured
 ```
 
-Carats components are simplified react components:
-- Only pure html attributes are supported. That means you can not pass an arrow function to onclick attribute. or onsubmit or a similar attribute.
-- Html attributes considered as strings generally
-- Props, .defaultProps, children are supported
-- There is no context, no memo and no forwardRef
-- A component can import any file Vite understands, which is how SASS is attached to a component
-A sample carats component looks like this:
+Import the global stylesheet (`base.sass`) exactly once here. Component stylesheets should only import tokens; see `carats-styling`.
+
+## Components
+Carats components are simplified React components:
+- Only pure HTML attributes are supported. You cannot pass an arrow function to `onclick`, `onsubmit`, or a similar attribute.
+- HTML attributes are generally treated as strings.
+- Props, `defaultProps`, and `children` are supported.
+- There is no context, no `memo`, and no `forwardRef`.
+- A component can import any file Vite understands, which is how SASS is attached to a component.
+- Event handling and other browser side effects belong in `afterMount` or `beforeMount`; read `carats-hooks`.
+
+A sample Carats component:
+
 ```tsx
 import './_layout.sass';
 
@@ -93,76 +107,78 @@ export default function Layout(props: JSX.ComponentProps) {
     )
 }
 ```
-Carats components must be .tsx files.
-Carats components can import other components and files supported by Vite (like sass, css, json, etc.)
-Carats components can be burnished when wrapped by Burnish function from @carats/render.
-Burnished means this component needs server side props. And carats framework will automatically fetch it from its culet. (Culets are defined by carats-server skill and they are matched with burnished components if their routes are equal)
-Sample burnished component:
+
+- Carats components must be `.tsx` files.
+- Carats components can import other components and files supported by Vite (SASS, CSS, JSON, and so on).
+
+## Burnished components
+A Carats component can be burnished by wrapping it with `Burnish` from `@carats/render`. A burnished component needs server-side props, and Carats automatically fetches them from its culet. Culets are covered in `carats-server`; they are matched to burnished components by equal route strings.
+
 ```tsx
 import { Burnish } from '@carats/render';
+
 export default Burnish<User>((user) => <h1>Hello {user.name}</h1>);
 ```
-Burnished components needs to be defined with function keyword only when this.head assignment is needed. This type is automatically inferred as CaratsComponent for Burnished function components (not the arrow ones).
+
+`User` is a global DTO declared in `src/dto/user.d.ts`, so no import is needed. See `carats-essentials` for the DTO convention.
+
+Burnished components need the `function` keyword only when a `this.head` assignment is needed. `Burnish` gives a function component a `this` of type `CaratsComponent`, so no annotation is needed; arrow functions still have no `this`.
+
 ```tsx
 import { Burnish } from '@carats/render';
-export default Burnish<User>(function (user){
+
+export default Burnish<User>(function (user) {
     this.head = <title>{user.name} - Profile Page</title>;
     return <h1>Hello {user.name}</h1>
 });
 ```
-Carats framework automatically caches the recent culet. If a component needs to fetch fresh data on every render, Burnish function accepts a second argument BurnishOptions. Setting `recast` property of options to true will trigger refetch on every render.
-Use `goTo` from @carats/csr for programmatic navigation such as submitting a search form. Build a query string with the standard `URLSearchParams`, and read a route's parameters by asking a culet for them: a culet receives the matched parameters in `req.params`.
-The props the server already resolved are exposed on `window.carats.ssp`, where `ssp.for` is the route they belong to and `ssp.data` is the value. Read them from a plain component instead of issuing a second request when the data is already there.
-A burnished component still accepts its culet's return value as ordinary props, so it renders in a test without a server.
-Here is the full @carats/render interface for better understanding:
+
+- Carats automatically caches the most recent culet result. If a component needs fresh data on every render, pass `BurnishOptions` as the second argument and set `recast` to `true`.
+- A burnished component still accepts its culet's return value as ordinary props, so it can render in a test without a server.
+- The props the server already resolved are exposed on `window.carats.ssp`, where `ssp.for` is the route they belong to and `ssp.data` is the value. Read them from a plain component instead of issuing a second request when the data is already there.
+- The exact `@carats/render` signatures are documented once in [carats-detailed-types](../carats-detailed-types/SKILL.md).
+
+## Navigation
+Use `goTo` from `@carats/csr` for programmatic navigation, such as submitting a search form:
+
 ```typescript
-interface CaratsComponent<T = any> extends JSX.FunctionComponent<T> {
-    defaultProps?: T;
-    head?: JSX.Element;
-    burnished?: boolean;
-    recast?: boolean;
-}
-type CaratsComponentWithThis<T = any> = ((this: CaratsComponent<T>, props: T) => JSX.Element) & CaratsComponent<T>;
-interface Facets {
-    inAppRouting?: boolean;
-    routes: Record<string, CaratsComponent>;
-    suspense: {
-        loading: () => JSX.Element;
-        error: (error: Error) => JSX.Element;
-        notFound: () => JSX.Element;
-    };
-}
-interface PartialFacets {
-    inAppRouting?: boolean;
-    routes?: Record<string, CaratsComponent>;
-    suspense?: Partial<Facets['suspense']>;
-}
-declare function defineFacets(facets: PartialFacets): Facets;
-interface PageComponentResult {
-    component: CaratsComponent<any>;
-    params: Record<string, string>;
-    route: string;
-}
-declare function getPageComponent(this: Facets, url: string): PageComponentResult;
-interface BurnishOptions {
-    recast?: boolean; // prevents props being cached
-}
-declare function Burnish<T = any>(component: CaratsComponentWithThis<T>, options?: BurnishOptions): CaratsComponentWithThis<T>;
-declare function Burnish<T = any>(component: CaratsComponent<T>, options?: BurnishOptions): CaratsComponent<T>;
+import { goTo } from '@carats/csr';
 
-export { Burnish, type CaratsComponent, type CaratsComponentWithThis, type Facets, type PageComponentResult, defineFacets, getPageComponent };
+function openSearch(query: string) {
+    const params = new URLSearchParams({ q: query });
+    goTo(`/search?${params}`);
+}
 ```
-`head` is a JSX.Element, not a string. Assign a fragment of tags to it.
-`getPageComponent` resolves a url to a component, its extracted params and the matched route. It is the function the server plugin is built on, and it is enough to work out what a request would render.
 
-Page and folder conventions:
-- Each route lives in its own folder under `src\client\pages`, exporting a default component from `index.tsx` next to a stylesheet of the same name.
-- A folder prefixed with an underscore is not a route, it is a shared building block. `_layout`, `_error` and `_not_found` are the conventional names.
-- There is no file convention layout. A `_layout` component is imported by each page that needs it, and renders `props.children` where the page belongs. Composition is explicit, so a page can opt out.
+`goTo` depends on in-app routing being enabled and on `clientRender()` running in the entrypoint. Call it from a real event handler registered in `afterMount` or `beforeMount`, not from an `onclick` attribute.
+
+Route parameters are matched by the facet route. When a page is burnished, the same parameters reach its culet in `req.params`, and the culet's return value becomes the page props. Query strings are not exposed as `req.query`; parse `req.url` with `new URL(req.url, 'http://localhost').searchParams` inside the culet.
+
+`getPageComponent` resolves a URL to a component, its extracted params, and the matched route. The server entrypoint uses it, and it is enough to work out what a request would render.
+
+## Page and folder conventions
+Each route lives in its own folder under `src/client/pages`, exporting a default component from `index.tsx` next to a stylesheet named after the folder:
+
+```text
+src/client/pages/
+  home/
+    index.tsx      <- default export of the Home component
+    home.sass      <- stylesheet named after the folder, not "index.sass"
+  profile/
+    index.tsx
+    profile.sass
+  _layout/
+    index.tsx
+    _layout.sass
+```
+
+- A folder prefixed with an underscore is not a route; it is a shared building block. `_layout`, `_error`, and `_not_found` are the conventional names.
+- There is no file-convention layout. A `_layout` component is imported by each page that needs it and renders `props.children` where the page belongs. Composition is explicit, so a page can opt out.
 - `suspense.error` receives the thrown `Error`, so it can read `message` and `stack`. `suspense.notFound` receives nothing. Wrap both in the shared layout so a failure still renders the site chrome.
 
-Facets are so crucial, they will be used on both client and server entrypoints.
-There must be a vite.config.client.ts at root, sample vite config for client:
+## Vite config
+There must be a `vite.config.client.ts` at the root. Sample client Vite config:
+
 ```typescript
 import { defineConfig } from 'vite'
 import path from 'path'
@@ -183,8 +199,15 @@ export default defineConfig({
     rollupOptions: {
       treeshake: true
     }
+  },
+  css: {
+    modules: {
+      localsConvention: 'dashes'
+    }
   }
 })
 ```
 
-- You can use version "latest" for all dependencies if no version is specified (e.g. you cant use latest if express 5 is required)
+The same facets object is used by both the client and server entrypoints.
+
+Pin dependency versions that are current when you install rather than using `latest`; a major release can break the framework. `@carats/express` requires Express 5, which is the current major version on npm.

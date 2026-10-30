@@ -1,29 +1,26 @@
 ---
 name: carats-server
-description: Use this skill when coding backend side logic for carats framework
+description: Use when coding server-side logic in a Carats project; culets, the server entrypoint, and server-side rendering props.
 ---
 
-Prerequisites:
-- Carats framework essentials
-- Server side rendering knowledge
-- Node.js knowledge
-- Bun package manager knowledge
+Read `carats-essentials` first.
 
 Dependencies:
-- "@carats/ssr": to handle server side rendering
-- "@carats/core": core logic (peer dependency)
-- "jjsx": jsx runtime (peer dependency)
-- "vite": build tool (peer dependency)
-- related backend plugin (e.g. @carats/express) and its peer dependencies (e.g. express, sirv, compression)
+- `@carats/ssr` for server-side rendering and culets
+- `@carats/core` for core logic (peer dependency)
+- `jjsx` for the JSX runtime (peer dependency)
+- `vite` for the build tool (peer dependency)
+- a backend plugin such as `@carats/express`, plus its peer dependencies (`express`, `sirv`, `compression`)
 
-Setup:
-- Can be integrated to any project but needs proper folder structure
-- Needs proper server folder at exact location: src\server
-- Needs proper client folder at exact location: src\client
-- Needs server entrypoint file at exact location: src\server\entrypoint.ts
-- Needs proper facets file at exact location: src\client\facets.tsx
-- Culets live at the exact location src\server\culets.ts, imported by the server entrypoint for their side effects.
-- Needs vite.config.server.ts at root, sample vite config for server:
+## Setup
+- Carats can be integrated into any project, but it needs the proper folder structure.
+- Server folder: `src/server`.
+- Client folder: `src/client`.
+- Server entrypoint: `src/server/entrypoint.ts`.
+- Facets file: `src/client/facets.tsx`.
+- Culets: `src/server/culets.ts`, imported by the server entrypoint for its side effects.
+- `vite.config.server.ts` at the root. Sample server Vite config:
+
 ```typescript
 import { defineConfig } from 'vite'
 import path from 'path'
@@ -31,8 +28,8 @@ import path from 'path'
 export default defineConfig({
   publicDir: false,
   build: {
-    ssr: path.resolve(__dirname, 'src/server/entrypoint.ts'),
-    outDir: path.resolve(__dirname, 'dist/server'),
+    ssr: path.resolve(import.meta.dirname, 'src/server/entrypoint.ts'),
+    outDir: path.resolve(import.meta.dirname, 'dist/server'),
     emptyOutDir: true,
     minify: true,
     rollupOptions: {
@@ -42,69 +39,93 @@ export default defineConfig({
 })
 ```
 
-- The entrypoint file is crucial for server side rendering.
-- The entrypoint file should export a default function that is defined using `defineServerEntry` from `@carats/ssr`.
-- `defineServerEntry` function expects to receive `facets` as parameter.
-- `facets` is a file that exports all the facets of the application. Server coder doesnt have to learn how to create facets, just import them '../client/facets.cara';
-- If facets (the frontend routes) needs to be changed, learn carats-client skill.
-- The entrypoint file may contain culets (server side functions) that are used to fetch data from the database or other sources.
-- Culets are defined using `culet` function from `@carats/ssr`.
-- You should only define culets if a server side prop is needed for a facet route & if its feasible to retrieve by a single GET request.
-- The route string of a culet must be character for character identical to the route of the facet it serves, including parameter names. There is no implicit matching by file name or component name. A mismatch fails silently: the page renders with `undefined` props and the error surfaces as a crash inside the component.
-- A culet declared inline in the entrypoint registers itself and needs no `seat` call.
-- If a culet is defined in another file, it must be seated by `seat` function from `@carats/ssr` in the entrypoint file. `seat` returns the culet unchanged, so it is a pure registration step. Do NOT also wrap a seated culet in another `culet()` call, because that registers the same handler under a second route. A minimal sample server entrypoint file:
+Use `import.meta.dirname` in both Vite configs; the project is ESM and runs on Bun.
+
+## Entrypoint
+The entrypoint default-exports the object returned by `defineServerEntry` from `@carats/ssr`. `defineServerEntry` receives the application facets.
+
+`facets` is the same object the client uses. You do not need to learn how to create facets to work on the server; import them from `../client/facets`. If the frontend routes need to change, read `carats-client`.
+
 ```typescript
-import { culet, defineServerEntry, seat } from '@carats/ssr';
-import facets from '../client/facets.cara';
-import getTradeData from './culets';
+import { defineServerEntry } from '@carats/ssr';
+import facets from '../client/facets';
+import './culets'; // registers every culet() call in that file
 
-seat(getTradeData)
-culet<User>('/profile', () => {
-  return {
-    id: '1',
-    name: 'Alexander Whitmore',
-    username: 'awhitmore',
-    email: 'a.whitmore@vault.io',
-    phone: '+1 (212) 555-0193',
-    website: 'whitmore.capital',
-  };
-});
-
-export default defineServerEntry(facets)
+export default defineServerEntry(facets);
 ```
-- The @carats/ssr type definitions for better understanding:
-```typescript
-import { CaratsRequest } from '@carats/core';
-import { Facets } from '@carats/render';
 
-interface CaratsServerEntry {
-    render: (req: CaratsRequest<never>) => Promise<{
-        html?: string;
-        head?: string;
-    }>;
-    getServerProps: <T = any>(req: CaratsRequest<never>) => Promise<T> | T;
-    facets: Facets;
-    culets: Record<string, Culet>;
+The entrypoint may also contain culets inline. An inline culet registers itself and needs no import.
+
+## Culets
+Culets are server-side functions that fetch data for burnished pages. Define one only when a server-side prop is needed for a facet route and it is feasible to retrieve with a single GET request.
+
+- The culet route string must be character-for-character identical to the facet route it serves, including parameter names. There is no implicit matching by file name or component name.
+- A mismatch fails silently: the page renders without the culet's return value, so the props it expects are missing and the error surfaces inside the component.
+- A culet declared inline in the entrypoint registers itself.
+- A culet defined in `culets.ts` registers when that module runs `culet(route, handler)`. Importing the module from the entrypoint is what registers it.
+- `seat(f)` is an identity helper: it returns `f` unchanged and does not attach a route. It is kept for API compatibility; registering a culet still requires `culet(route, handler)`.
+
+Complete `culets.ts` example:
+
+```typescript
+// src/server/culets.ts
+import { culet } from '@carats/ssr';
+
+async function getProfile(id: string): Promise<User> {
+    return {
+        id,
+        name: 'Alexander Whitmore',
+        username: 'awhitmore',
+        email: 'a.whitmore@vault.io',
+        phone: '+1 (212) 555-0193',
+        website: 'whitmore.capital',
+    };
 }
-type CuletArgs = Omit<CaratsRequest, 'data'> & {
-    params: Record<string, string>;
-};
-type Culet<T = any> = (request: CuletArgs) => T;
-declare const seat: <T extends Culet>(f: T) => T;
-declare function culet<T = any>(route: string, culet: Culet<T>): Culet<T>;
-declare function defineServerEntry(facets: Facets): CaratsServerEntry;
 
-export { type CaratsServerEntry, type Culet, type CuletArgs, culet, defineServerEntry, seat };
-
+culet('/profile/:id', (req) => getProfile(req.params.id));
 ```
 
-- server entrypoint's default export is crucial to make server plugins like @carats/express work.
-- The object returned by `defineServerEntry` is what the server plugin drives. `render(req)` resolves the facet for the requested url, runs the page component and returns the rendered `html` together with the collected `head` tags. `getServerProps(req)` resolves the culet for the requested url and returns its value, or `undefined` when the route has no culet. `facets` is the shared facets object and `culets` is the registry built by `culet` and `seat`.
-- server plugins are used to integrate carats with existing backend frameworks like express.
-- server plugins export named function `carats` which can be used as an app middleware when invoked. It returns an express `Router`, so mount it with `app.use`.
-- server plugins are needed to make carats work with existing backend frameworks.
-- order the middleware so that `carats()` runs after the routes and static handlers it should not swallow.
-- a minimal express server example: (app.ts in /src directory) which requires @types/node and @types/express peer dependencies too:
+`User` is a global DTO declared in `src/dto/user.d.ts`, so no import is needed. See `carats-essentials` for the DTO convention.
+
+Reading route parameters:
+
+```typescript
+culet<{ id: string }>('/users/:id', (req) => {
+    return { id: req.params.id };
+});
+```
+
+`CuletArgs` contains `url`, `headers`, `cookies`, `method`, and `params`. It does not contain `query` and it omits `data`, because a culet is only ever reached by a GET. For a query string, parse `req.url`:
+
+```typescript
+culet<{ q: string }>('/search', (req) => {
+    const url = new URL(req.url, 'http://localhost');
+    return { q: url.searchParams.get('q') ?? '' };
+});
+```
+
+Error and empty behavior:
+- If a culet throws or rejects, rendering fails and the server renders `suspense.error` with status 500. A `/culet/...` request also responds with 500.
+- If a culet returns `undefined`, the page receives `undefined` as props. There is no fallback; the component must tolerate it or the render fails.
+- A culet return value is serialized into `window.carats.ssp`, so it must be JSON-serializable. Return plain objects and arrays. `Date` values become strings, `undefined` and functions are dropped, and `BigInt` or circular references throw.
+- A culet handler can be async; the runtime awaits the returned promise. The published `Culet<T>` type returns `T`, not `Promise<T>`, so `culet<User>(..., async ...)` fails type checking. Omit the explicit generic for an async handler, as in the example above.
+
+The exact `@carats/ssr` signatures are documented once in [carats-detailed-types](../carats-detailed-types/SKILL.md).
+
+## Server entry behavior
+The object returned by `defineServerEntry` is what the server plugin drives:
+- `render(req)` resolves the facet for the requested URL, runs the page component, and returns the rendered `html` together with the collected `head` tags.
+- `getServerProps(req)` resolves the culet for the requested URL. If the route has no culet, it returns the route params merged with the component's `defaultProps`; if a culet returns `undefined`, the result is `undefined`.
+- `facets` is the shared facets object.
+- `culets` is the registry that `culet` populates. `seat` does not add to it.
+
+## Express integration
+Server plugins integrate Carats with an existing backend framework. A plugin exports a named `carats` function that returns an Express `Router`, so mount it with `app.use`.
+
+Order the middleware so `carats()` runs after the routes and static handlers it should not swallow.
+
+A minimal Express server (`src/app.ts`) also needs the `@types/node` and `@types/express` dev dependencies:
+
 ```typescript
 import { carats } from '@carats/express'
 import express from 'express'
@@ -120,6 +141,9 @@ const server = app.listen(port, () => {
 
 export default server
 ```
-- note that @carats/express works with express v5, so the major version is not optional. A culet may also read `req.cookies`, `req.headers`, `req.query`, `req.url` and `req.method`, but it is only ever reached by a GET, which is why `CuletArgs` omits `data`.
-- a culet handler can be async; awaiting inside it is the normal way to talk to a database or a remote API. Returning a promise is enough, there is no need to await it at the call site.
-- @carats/ssg prerenders the app to static HTML and is used through the `build:static` script (`cross-env NODE_ENV=production carats-ssg`). It ships a command line binary and no runtime exports, so it is never imported in application code.
+
+You do not import `sirv` or `compression` yourself. Inside `carats()`, `@carats/express` adds compression and serves the built client assets with `sirv` in production, and uses Vite middleware in development. They are peer dependencies of the plugin.
+
+`@carats/express` requires Express 5, so the major version is not optional.
+
+`@carats/ssg` prerenders the app to static HTML and is used through the `build:static` script (`cross-env NODE_ENV=production carats-ssg`). It ships a command-line binary and no runtime exports, so it is never imported in application code.

@@ -47,9 +47,9 @@ npx skills add carats-labs/skills --list
 | `carats-essentials` | Core concepts, project setup, tsconfig, scripts. Read first. |
 | `carats-client` | Client-side pages, components, facets, routing, `Burnish`. |
 | `carats-server` | Culets, server entrypoint, server-side rendering and props. |
-| `carats-hooks` | TODO: one-line description |
-| `carats-styling` | TODO: one-line description |
-| `carats-detailed-types` | TODO: one-line description |
+| `carats-hooks` | State (`use`) and client lifecycle callbacks (`afterMount`, `beforeMount`). |
+| `carats-styling` | Default styling rules: scoped Sass, semantic HTML, design tokens. |
+| `carats-detailed-types` | Exact type signatures for the `@carats/*` APIs. |
 
 ## Update
 
@@ -59,8 +59,12 @@ npx skills update
 
 ## Project template
 
-A complete working app that follows these skills:
+A complete working app that these skills are based on:
 
 ```bash
 bun create carats <directory>
 ```
+
+These skills describe the latest published `@carats/*` APIs. The template may
+pin slightly older versions; update its `@carats/*` dependencies if a
+documented export is missing.
